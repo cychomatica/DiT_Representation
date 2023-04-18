@@ -238,7 +238,7 @@ def main(args):
     DiT_model.load_state_dict(state_dict)
     VAE_model = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}")
 
-    model = DiffRep(vae=VAE_model, dit=DiT_model, t=0, n_last_blocks=10, return_patch_avgpool=False, num_classes=args.num_classes).to(device)
+    model = DiffRep(vae=VAE_model, dit=DiT_model, t=0, n_last_blocks=args.n_last_blocks, return_patch_avgpool=False, num_classes=args.num_classes).to(device)
     model = DDP(model, device_ids=[rank])
 
     criterion = torch.nn.CrossEntropyLoss()
@@ -413,7 +413,7 @@ if __name__ == '__main__':
                         help="Optional path to a DiT checkpoint (default: auto-download a pre-trained DiT-XL/2 model).")
     parser.add_argument("--image_size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num_classes", type=int, default=1000)
-
+    parser.add_argument("--n_last_blocks", type=int, default=10)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--global_batch_size", type=int, default=256)
