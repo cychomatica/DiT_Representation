@@ -1,64 +1,57 @@
+import io
 import os
-from PIL import Image
-import six
 import lmdb
-import pickle
+import torch
 import numpy as np
+from PIL import Image
+from torchvision.datasets import ImageFolder
 
-import torch.utils.data as data
+def lmdb_loader(path, lmdb_data, resolution):
+    # In-memory binary streams
+    with lmdb_data.begin(write=False, buffers=True) as txn:
+        bytedata = txn.get(path.encode('ascii'))
+    img = Image.open(io.BytesIO(bytedata)).convert('RGB')
+    img = img.astype(np.float32)
+    img = np.transpose(img, [2, 0, 1])  # CHW
+    return img
 
-
-def loads_data(buf):
+def imagenet_lmdb_dataset(
+        root, transform=None, target_transform=None, resolution=256,
+        loader=lmdb_loader):
     """
-    Args:
-        buf: the output of `dumps`.
+    You can create this dataloader using:
+    train_data = imagenet_lmdb_dataset(traindir, transform=train_transform)
+    valid_data = imagenet_lmdb_dataset(validdir, transform=val_transform)
     """
-    return pickle.loads(buf)
 
+    if root.endswith('/'):
+        root = root[:-1]
+    pt_path = os.path.join(
+        root + '_faster_imagefolder.lmdb.pt')
+    lmdb_path = os.path.join(
+        root + '_faster_imagefolder.lmdb')
+    if os.path.isfile(pt_path) and os.path.isdir(lmdb_path):
+        print('Loading pt {} and lmdb {}'.format(pt_path, lmdb_path))
+        data_set = torch.load(pt_path)
+    else:
+        data_set = ImageFolder(
+            root, None, None, None)
+        torch.save(data_set, pt_path, pickle_protocol=4)
+        print('Saving pt to {}'.format(pt_path))
+        print('Building lmdb to {}'.format(lmdb_path))
+        env = lmdb.open(lmdb_path, map_size=1e12)
+        with env.begin(write=True) as txn:
+            for path, class_index in data_set.imgs:
+                with open(path, 'rb') as f:
+                    data = f.read()
+                txn.put(path.encode('ascii'), data)
+    data_set.lmdb_data = lmdb.open(
+        lmdb_path, readonly=True, max_readers=1, lock=False, readahead=False,
+        meminit=False)
+    # reset transform and target_transform
+    data_set.samples = data_set.imgs
+    data_set.transform = transform
+    data_set.target_transform = target_transform
+    data_set.loader = lambda path: loader(path, data_set.lmdb_data, resolution)
 
-class ImageFolderLMDB(data.Dataset):
-    def __init__(self, db_path, transform=None, target_transform=None):
-        self.db_path = db_path
-        self.env = lmdb.open(db_path, subdir=os.path.isdir(db_path),
-                             readonly=True, lock=False,
-                             readahead=False, meminit=False)
-        with self.env.begin(write=False) as txn:
-            self.length = loads_data(txn.get(b'__len__'))
-            self.keys = loads_data(txn.get(b'__keys__'))
-
-        self.transform = transform
-        self.target_transform = target_transform
-
-    def __getitem__(self, index):
-        env = self.env
-        with env.begin(write=False) as txn:
-            byteflow = txn.get(self.keys[index])
-
-        unpacked = loads_data(byteflow)
-
-        # load img
-        imgbuf = unpacked[0]
-        buf = six.BytesIO()
-        buf.write(imgbuf)
-        buf.seek(0)
-        img = Image.open(buf).convert('RGB')
-
-        # load label
-        target = unpacked[1]
-
-        if self.transform is not None:
-            img = self.transform(img)
-
-        im2arr = np.array(img)
-
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
-        # return img, target
-        return im2arr, target
-
-    def __len__(self):
-        return self.length
-
-    def __repr__(self):
-        return self.__class__.__name__ + ' (' + self.db_path + ')'
+    return data_set

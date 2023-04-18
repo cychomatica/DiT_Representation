@@ -20,7 +20,7 @@ import argparse, os, logging
 from glob import glob
 from time import time
 
-from lmdb_utils import ImageFolderLMDB
+from lmdb_utils import imagenet_lmdb_dataset
 
 class Head(torch.nn.Module):
     def __init__(self, dim, num_classes) -> None:
@@ -265,8 +265,8 @@ def main(args):
                                         ])
     # dataset_train = ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
     # dataset_val = ImageFolder(os.path.join(args.data_path, 'val'), transform=transform_val)
-    dataset_train = ImageFolderLMDB(db_path=os.path.join(args.data_path, 'train'), transform=transform_train)
-    dataset_val = ImageFolderLMDB(db_path=os.path.join(args.data_path, 'val'), transform=transform_val)
+    dataset_train = imagenet_lmdb_dataset(root=os.path.join(args.data_path, 'train'), transform=transform_train)
+    dataset_val = imagenet_lmdb_dataset(root=os.path.join(args.data_path, 'val'), transform=transform_val)
 
     sampler_train = DistributedSampler(
                     dataset_train,
