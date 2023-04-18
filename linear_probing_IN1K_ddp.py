@@ -20,13 +20,14 @@ import argparse, os, logging
 from glob import glob
 from time import time
 
+from lmdb_utils import ImageFolderLMDB
+
 class Head(torch.nn.Module):
     def __init__(self, dim, num_classes) -> None:
         super().__init__()
         self.dim = dim
         self.num_classes = num_classes
         self.norm_layer = torch.nn.BatchNorm1d(self.dim, affine=False, eps=1e-6)
-        # self.norm_layer = torch.nn.LayerNorm(self.dim)
         self.fc = torch.nn.Linear(self.dim, self.num_classes)
 
     def forward(self, x):
@@ -122,7 +123,7 @@ class DiffRep(torch.nn.Module):
         self.return_patch_avgpool = return_patch_avgpool
         self.latent = Latent(vae, dit, hidden_size, t)
         self.head = Head(hidden_size * (n_last_blocks + int(return_patch_avgpool)), num_classes)
-        print(hidden_size * (n_last_blocks + int(return_patch_avgpool)))
+        # print(hidden_size * (n_last_blocks + int(return_patch_avgpool)))
         # freeze the params of latent extractor
         for param in self.latent.parameters():
             param.requires_grad = False
@@ -262,8 +263,10 @@ def main(args):
                                         transforms.ToTensor(),
                                         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
                                         ])
-    dataset_train = ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
-    dataset_val = ImageFolder(os.path.join(args.data_path, 'val'), transform=transform_val)
+    # dataset_train = ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
+    # dataset_val = ImageFolder(os.path.join(args.data_path, 'val'), transform=transform_val)
+    dataset_train = ImageFolderLMDB(db_path=os.path.join(args.data_path, 'train'), transform=transform_train)
+    dataset_val = ImageFolderLMDB(db_path=os.path.join(args.data_path, 'val'), transform=transform_val)
 
     sampler_train = DistributedSampler(
                     dataset_train,
@@ -297,6 +300,7 @@ def main(args):
                     pin_memory=True,
                     drop_last=False
                     )
+    print(loader_train.batch_size, loader_val.batch_size)
     logger.info(f"Training set contains {len(dataset_train):,} images ({os.path.join(args.data_path, 'train')})")
     logger.info(f"Validation set contains {len(dataset_val):,} images ({os.path.join(args.data_path, 'val')})")
 
@@ -332,8 +336,8 @@ def main(args):
             train_correct1_batch, train_correct5_batch = correct(y_pred, y, topk=(1, 5))
 
             training_loss += loss.item()
-            train_correct1 += train_correct1_batch
-            train_correct5 += train_correct5_batch
+            train_correct1 += train_correct1_batch.item()
+            train_correct5 += train_correct5_batch.item()
             train_total += x.shape[0]
 
             log_steps += 1
@@ -389,8 +393,8 @@ def main(args):
             y = y.to(device)
             y_pred = model(x)
             val_correct1_batch, val_correct5_batch = correct(y_pred, y, topk=(1, 5))
-            val_correct1 += val_correct1_batch
-            val_correct5 += val_correct5_batch
+            val_correct1 += val_correct1_batch.item()
+            val_correct5 += val_correct5_batch.item()
             val_total += x.shape[0]
         val_acc1 = torch.tensor(val_correct1 / val_total * 100, device=device)
         val_acc5 = torch.tensor(val_correct5 / val_total * 100, device=device)

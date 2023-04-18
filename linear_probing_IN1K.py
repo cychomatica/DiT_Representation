@@ -20,6 +20,8 @@ import argparse, os, logging
 from glob import glob
 from time import time
 
+from lmdb_utils import ImageFolderLMDB
+
 class Head(torch.nn.Module):
     def __init__(self, dim, num_classes) -> None:
         super().__init__()
@@ -245,8 +247,11 @@ def main(args):
                                         transforms.ToTensor(),
                                         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
                                         ])
-    dataset_train = ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
-    dataset_val = ImageFolder(os.path.join(args.data_path, 'val'), transform=transform_val)
+    from lmdb_utils import imagenet_lmdb_dataset
+    dataset_train = ImageFolderLMDB(db_path=os.path.join(args.data_path, 'train'), transform=transform_train)
+    dataset_val = ImageFolderLMDB(db_path=os.path.join(args.data_path, 'val'), transform=transform_val)
+    # dataset_train = ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
+    # dataset_val = ImageFolder(os.path.join(args.data_path, 'val'), transform=transform_val)
 
     loader_train = DataLoader(
                     dataset_train,
