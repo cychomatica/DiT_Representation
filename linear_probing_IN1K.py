@@ -358,8 +358,7 @@ if __name__ == '__main__':
     parser.add_argument("--data_path", type=str, default='/home/data/ILSVRC2012')
     parser.add_argument("--results_dir", type=str, default="results")
     parser.add_argument("--dit_model", type=str, choices=list(DiT_models.keys()), default="DiT-XL/2")
-    parser.add_argument("--ckpt", type=str, default='pretrained_models/DiT-XL-2-256x256.pt',
-                        help="Optional path to a DiT checkpoint (default: auto-download a pre-trained DiT-XL/2 model).")
+    parser.add_argument("--ckpt", type=str, help="Optional path to a DiT checkpoint (default: auto-download a pre-trained DiT-XL/2 model).")
     parser.add_argument("--image_size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num_classes", type=int, default=1000)
     parser.add_argument("--n_last_blocks", type=int, default=10)
