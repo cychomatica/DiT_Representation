@@ -367,6 +367,7 @@ if __name__ == '__main__':
     parser.add_argument("--image_size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num_classes", type=int, default=1000)
     parser.add_argument("--n_last_blocks", type=int, default=10)
+    parser.add_argument("--depths", type=int, nargs='+', default=[2,4,8,16])
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--global_batch_size", type=int, default=64)

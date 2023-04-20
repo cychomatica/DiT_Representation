@@ -11,8 +11,8 @@ def lmdb_loader(path, lmdb_data, resolution):
     with lmdb_data.begin(write=False, buffers=True) as txn:
         bytedata = txn.get(path.encode('ascii'))
     img = Image.open(io.BytesIO(bytedata)).convert('RGB')
-    img = img.astype(np.float32)
-    img = np.transpose(img, [2, 0, 1])  # CHW
+    # img = np.array(img, dtype=np.float32)
+    # img = np.transpose(img, [2, 0, 1])  # CHW
     return img
 
 def imagenet_lmdb_dataset(
