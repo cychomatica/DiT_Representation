@@ -21,6 +21,7 @@ from glob import glob
 from time import time
 
 from lmdb_utils import imagenet_lmdb_dataset
+from diffusion import gaussian_diffusion
 
 class Head(torch.nn.Module):
     def __init__(self, dim, num_classes) -> None:
@@ -44,6 +45,14 @@ class Latent(torch.nn.Module):
         self.dit = dit
         self.norm_layer = torch.nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.t = t
+
+        # diffusion params
+        self.betas = gaussian_diffusion.get_beta_schedule(beta_schedule="linear", beta_start=0.0001,
+                                                          beta_end=0.02, num_diffusion_timesteps=1000)
+        self.alphas = 1.0 - self.betas
+        self.alphas_cumprod = np.cumprod(self.alphas, axis=0)
+        self.sqrt_alphas_cumprod = np.sqrt(self.alphas_cumprod)
+        self.sqrt_one_minus_alphas_cumprod = np.sqrt(1.0 - self.alphas_cumprod)
     
     def forward(self, x, t=None):
         '''
@@ -85,13 +94,17 @@ class Latent(torch.nn.Module):
         # VAE latent
         x = self.vae.encode(x).latent_dist.sample().mul_(0.18215)   # (N, 4, latent_size, latent_size)
 
-        # conditioning (only timestep)
+        # latent diffusion to t
         if t is None:
             t = torch.tensor([self.t]*x.shape[0]).to(x.device)
         else:
             t = torch.tensor([t]*x.shape[0]).to(x.device)
+        z = torch.randn_like(x)
+        x = gaussian_diffusion._extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape) * x + gaussian_diffusion._extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * z
+        
+        # conditioning
         t = self.dit.t_embedder(t)                          # (N, hidden_size)
-        y = torch.tensor([1000]*x.shape[0]).to(x.device)    # equivalent to cfg label dropping
+        y = torch.tensor([1000]*x.shape[0]).to(x.device)    # use 1000 as label conditioning; equivalent to cfg label dropping
         y = self.dit.y_embedder(y, self.training)           # (N, D)
         c = t + y
 
@@ -133,12 +146,9 @@ class DiffRep(torch.nn.Module):
 
         head_dim_in = hidden_size * (len(representation_layers) + int(return_patch_avgpool))
         self.head = Head(head_dim_in, num_classes)
-        # print(hidden_size * (n_last_blocks + int(return_patch_avgpool)))
 
     def forward(self, x):
-
-        with torch.no_grad():
-            x = self.latent.forward_return_n_last_blocks(x, self.t, self.representation_layers, self.return_patch_avgpool)
+        x = self.latent.forward_return_n_last_blocks(x, self.t, self.representation_layers, self.return_patch_avgpool)
         x = self.head(x)
         return x
     
@@ -247,13 +257,16 @@ def main(args):
 
     model = DiffRep(vae=VAE_model, 
                     dit=DiT_model, 
-                    t=0,
+                    t=args.timestep,
                     representation_layers=representation_layers,
                     return_patch_avgpool=False, 
                     num_classes=args.num_classes
                     ).to(device)
+    if args.training == 'linear_probe':
+        requires_grad(model.latent, False)
     model = DDP(model, device_ids=[rank])
 
+    logger.info('Diffusion timestep: {}'.format(args.timestep))
     logger.info('Representations from DiT block: {}'.format(representation_layers))
     logger.info('Linear head dim: {}'.format([model.module.head.dim, model.module.head.num_classes]))
     # return 0
@@ -263,12 +276,8 @@ def main(args):
     logger.info(f"Training mode: {args.training}")
 
     if args.training == 'linear_probe':
-        requires_grad(model.module.latent, False)
-        requires_grad(model.module.head, True)
         opt = torch.optim.AdamW(model.module.head.parameters(), lr=args.lr, weight_decay=0)
     elif args.training == 'fine_tune':
-        requires_grad(model.module.latent, True)
-        requires_grad(model.module.head, True)
         opt = torch.optim.AdamW(model.module.parameters(), lr=args.lr, weight_decay=0)
     # opt = torch.optim.SGD(model.module.head.parameters(), lr=args.lr, momentum=0.9, weight_decay=0)
     # transform = transforms.Compose([
@@ -453,6 +462,7 @@ if __name__ == '__main__':
     parser.add_argument("--n_blocks", type=int, default=10)
     parser.add_argument("--shift_from_last", type=int, default=0)
     parser.add_argument("--representation_layers", type=int, nargs='+', default=[])
+    parser.add_argument("--timestep", type=int, default=0)
     parser.add_argument("--resume_ckpt", type=str, default=None)
     parser.add_argument("--training", type=str, choices=['linear_probe', 'fine_tune'], default='linear_probe')
     parser.add_argument("--lr", type=float, default=1e-4),
