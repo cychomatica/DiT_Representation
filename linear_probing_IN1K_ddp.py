@@ -113,6 +113,8 @@ class Latent(torch.nn.Module):
             representation_layers = [len(self.dit.blocks)]  # if representation_layers empty, use the representation from the last layer by default
         output = []
         x = self.dit.x_embedder(x) + self.dit.pos_embed     # (N, T, hidden_size)
+        if 0 in representation_layers:
+            output.append(x.mean(dim=1))
         for i, block in enumerate(self.dit.blocks):
             x = block(x, c) 
             if i+1 in representation_layers:
