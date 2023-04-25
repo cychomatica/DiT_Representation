@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch --nnodes 1 --nproc_per_node 4 linear_probing_IN1K_ddp.py --data_path /home/scratch.chaoweix_nvresearch/datasets/23145 --global_batch_size 1024 --representation_layers 12 13 14 15 16 --lr 1e-4
