@@ -257,7 +257,7 @@ def main(args):
 
     model = DiffRep(vae=VAE_model, 
                     dit=DiT_model, 
-                    t=None,
+                    t=args.timestep,
                     representation_layers=representation_layers,
                     return_patch_avgpool=False, 
                     num_classes=args.num_classes
@@ -266,7 +266,7 @@ def main(args):
         requires_grad(model.latent, False)
     model = DDP(model, device_ids=[rank])
 
-    logger.info('Diffusion timestep: t=randint(0,1000) during training & t=0 during inference')
+    logger.info('Diffusion timestep: t=randint(0,1000) during training & t={} during inference'.format(args.timestep))
     logger.info('Representations from DiT block: {}'.format(representation_layers))
     logger.info('Linear head dim: {}'.format([model.module.head.dim, model.module.head.num_classes]))
     # return 0
@@ -435,7 +435,7 @@ def main(args):
         for x, y in loader_val:
             x = x.to(device)
             y = y.to(device)
-            t = torch.zeros(size=[x.shape[0]], dtype=int).to(device)
+            t = torch.ones(size=[x.shape[0]], dtype=int).to(device) * args.timestep
             y_pred = model(x, t)
             val_correct1_batch, val_correct5_batch = correct(y_pred, y, topk=(1, 5))
             val_correct1 += val_correct1_batch.item()
